@@ -36,9 +36,9 @@ class ImportService:
 
     @classmethod
     def format_chart_line(cls, chart: sqlite3.Row) -> str:
-        note_suffix = f" / 物量 {int(chart['note_count'])}" if "note_count" in chart.keys() and chart["note_count"] is not None else ""
+        note_suffix = f" | 物量 {int(chart['note_count'])}" if "note_count" in chart.keys() and chart["note_count"] is not None else ""
         return (
-            f"{cls.chart_display_name(chart)} [{chart['difficulty']}] / {chart['pack_name']} / "
+            f"{cls.chart_display_name(chart)} [{chart['difficulty']}] | {chart['pack_name']} | "
             f"定数 {chart['constant']}{note_suffix}"
         )
 
@@ -159,7 +159,7 @@ class ImportService:
         session.current = None
 
         lines = [
-            f"已录入：{self.chart_display_name(chart)} [{chart['difficulty']}] / {chart['pack_name']}",
+            f"已录入：{self.chart_display_name(chart)} [{chart['difficulty']}] | {chart['pack_name']}",
             f"分数：{score}（{improved}）",
             f"游玩次数：{result['play_count']} | 定数：{chart['constant']} | PTT：{ptt:.3f}",
         ]

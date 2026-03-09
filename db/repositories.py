@@ -93,6 +93,57 @@ class ArcaeaRepository:
             "play_count": play_count,
         }
 
+
+    def get_chart_by_id(self, chart_id: int) -> sqlite3.Row | None:
+        return self.conn.execute(
+            "SELECT * FROM charts WHERE chart_id = ?",
+            (chart_id,),
+        ).fetchone()
+
+    def get_user_chart_best_row(self, user_key: str, chart_id: int) -> sqlite3.Row | None:
+        return self.conn.execute(
+            """
+            SELECT
+                b.user_key,
+                b.chart_id,
+                b.best_score,
+                b.play_count,
+                b.last_score,
+                b.updated_at,
+                c.song_name,
+                c.pack_name,
+                c.version_group,
+                c.version_text,
+                c.difficulty,
+                c.level_text,
+                c.constant,
+                c.note_count
+            FROM user_chart_best b
+            JOIN charts c ON c.chart_id = b.chart_id
+            WHERE b.user_key = ? AND b.chart_id = ?
+            """,
+            (user_key, chart_id),
+        ).fetchone()
+
+    def delete_user_chart(self, user_key: str, chart_id: int) -> dict:
+        history_deleted = int(
+            self.conn.execute(
+                "DELETE FROM score_history WHERE user_key = ? AND chart_id = ?",
+                (user_key, chart_id),
+            ).rowcount or 0
+        )
+        best_deleted = int(
+            self.conn.execute(
+                "DELETE FROM user_chart_best WHERE user_key = ? AND chart_id = ?",
+                (user_key, chart_id),
+            ).rowcount or 0
+        )
+        self.conn.commit()
+        return {
+            "history_deleted": history_deleted,
+            "best_deleted": best_deleted,
+        }
+
     def get_total_chart_count(self) -> int:
         row = self.conn.execute("SELECT COUNT(*) AS cnt FROM charts").fetchone()
         return int(row["cnt"] if row else 0)
@@ -129,6 +180,53 @@ class ArcaeaRepository:
             FROM user_chart_best b
             JOIN charts c ON c.chart_id = b.chart_id
             WHERE b.user_key = ?
+            ORDER BY c.chart_id
+            """,
+            (user_key,),
+        ).fetchall()
+        return list(rows)
+
+    def get_all_chart_rows(self) -> list[sqlite3.Row]:
+        rows = self.conn.execute(
+            """
+            SELECT
+                c.chart_id,
+                c.song_name,
+                c.pack_name,
+                c.version_group,
+                c.version_text,
+                c.difficulty,
+                c.level_text,
+                c.constant,
+                c.note_count
+            FROM charts c
+            ORDER BY c.chart_id
+            """
+        ).fetchall()
+        return list(rows)
+
+    def get_all_chart_rows_with_user_scores(self, user_key: str) -> list[sqlite3.Row]:
+        rows = self.conn.execute(
+            """
+            SELECT
+                c.chart_id,
+                c.song_name,
+                c.pack_name,
+                c.version_group,
+                c.version_text,
+                c.difficulty,
+                c.level_text,
+                c.constant,
+                c.note_count,
+                COALESCE(b.best_score, 0) AS best_score,
+                COALESCE(b.play_count, 0) AS play_count,
+                COALESCE(b.last_score, 0) AS last_score,
+                b.updated_at
+            FROM charts c
+            LEFT JOIN user_chart_best b
+              ON c.chart_id = b.chart_id
+             AND b.user_key = ?
+            ORDER BY c.chart_id
             """,
             (user_key,),
         ).fetchall()

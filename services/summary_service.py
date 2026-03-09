@@ -2,12 +2,14 @@ from __future__ import annotations
 
 from ..constants import ALLOWED_DIFFICULTIES
 from ..db.repositories import ArcaeaRepository
+from ..services.aggregates.score_summary import CrossGameSummaryService
 from ..services.metrics.arc import calc_arc_ptt, next_grade_gap, score_grade
 
 
 class SummaryService:
     def __init__(self, repo: ArcaeaRepository):
         self.repo = repo
+        self.cross_game_summary = CrossGameSummaryService()
 
     def build_summary_text(self, user_key: str) -> str:
         rows = self.repo.get_user_chart_rows(user_key)
@@ -20,28 +22,38 @@ class SummaryService:
         overall_rate = imported_count / max(1, total_charts) * 100
 
         enriched: list[dict] = []
+        source_rows: list[dict] = []
         for row in rows:
             best_score = int(row["best_score"])
             ptt = calc_arc_ptt(float(row["constant"]), best_score)
             next_grade, gap = next_grade_gap(best_score)
+            row_dict = {
+                "chart_id": int(row["chart_id"]),
+                "song_name": row["song_name"],
+                "pack_name": row["pack_name"],
+                "version_group": row["version_group"],
+                "version_text": row["version_text"],
+                "difficulty": row["difficulty"],
+                "level_text": row["level_text"],
+                "constant": float(row["constant"]),
+                "note_count": int(row["note_count"] or 0),
+                "best_score": best_score,
+                "play_count": int(row["play_count"]),
+            }
+            source_rows.append(row_dict)
             enriched.append(
                 {
-                    "song_name": row["song_name"],
-                    "pack_name": row["pack_name"],
-                    "version_group": row["version_group"],
-                    "version_text": row["version_text"],
-                    "difficulty": row["difficulty"],
-                    "level_text": row["level_text"],
-                    "constant": float(row["constant"]),
-                    "note_count": int(row["note_count"] or 0),
-                    "best_score": best_score,
-                    "play_count": int(row["play_count"]),
+                    **row_dict,
                     "ptt": ptt,
                     "grade": score_grade(best_score),
                     "next_grade": next_grade,
                     "gap": gap,
                 }
             )
+
+        all_chart_rows = self._load_all_chart_rows()
+        score_rows, cross = self.cross_game_summary.build(source_rows, total_max_source_rows=all_chart_rows)
+        score_row_by_chart_id = {row.chart_id: row for row in score_rows}
 
         enriched.sort(key=lambda item: (item["ptt"], item["best_score"]), reverse=True)
         top10 = enriched[:10]
@@ -84,60 +96,112 @@ class SummaryService:
         lines: list[str] = []
         lines.append("Arcaea 成绩总结")
         lines.append("")
-        lines.append(f"已录入谱面：{imported_count}/{total_charts}（{overall_rate:.1f}%）")
+        lines.append(f"已录入谱面：{imported_count} | {total_charts}（{overall_rate:.1f}%）")
         lines.append(f"总游玩次数：{total_play_count}")
         lines.append(f"已录入总物量：{total_note_count}")
         lines.append(f"Best30 平均：{b30_avg:.3f}")
         lines.append(f"Arc Max（按当前已录入计算）：{arc_max:.3f}")
         if len(top30) < 30:
-            lines.append(f"当前 B30 未满：{len(top30)}/30")
+            lines.append(f"当前 B30 未满：{len(top30)} | 30")
         lines.append(f"Top10 地板：{top10_floor:.3f}")
         lines.append(f"Top30 地板：{top30_floor:.3f}")
 
         lines.append("")
-        lines.append("按难度完成率（录入/总数，PM）")
+        lines.append("分数表公式汇总（按 xlsx 逻辑换算）")
+        lines.append(f"- Arc：{cross.arc_total:.2f}")
+        lines.append(f"- mai：{cross.mai_total}（底分 {cross.mai_base_total} + 完成度加成 {cross.mai_bonus}）")
+        lines.append(f"- mai+：{cross.mai_plus_total}")
+        lines.append(f"- chu：{cross.chu_total:.2f}")
+        lines.append(f"- rot：{cross.rot_total:.3f}")
+        lines.append(f"- para：{cross.para_total:.2f}（小数余量 {cross.para_fraction_points} | 10000）")
+        lines.append(f"- GET | MAX：{cross.total_get:.3f} | {cross.total_max:.3f}")
+        lines.append(f"- 完成度倍率：{cross.get_ratio:.4f}")
+
+        lines.append("")
+        lines.append("按难度完成率（录入 | 总数，PM）")
         for diff in difficulty_order:
             total = difficulty_totals.get(diff, 0)
             owned = difficulty_owned.get(diff, 0)
             pm = difficulty_pm.get(diff, 0)
             rate = owned / max(1, total) * 100 if total else 0.0
-            lines.append(f"- {diff}: {owned}/{total}（{rate:.1f}%），PM {pm}")
+            lines.append(f"- {diff}：{owned} | {total}（{rate:.1f}%），PM {pm}")
 
         lines.append("")
         lines.append("分数段统计")
         for bucket in score_bucket_order:
-            lines.append(f"- {bucket}: {score_buckets.get(bucket, 0)}")
+            lines.append(f"- {bucket}：{score_buckets.get(bucket, 0)}")
 
         lines.append("")
-        lines.append("版本组完成率（录入/总数，PM）")
+        lines.append("版本组完成率（录入 | 总数，PM）")
         for version_group in sorted(version_totals.keys()):
             owned = version_owned.get(version_group, 0)
             total = version_totals[version_group]
             pm = version_pm.get(version_group, 0)
             rate = owned / max(1, total) * 100 if total else 0.0
-            lines.append(f"- {version_group}: {owned}/{total}（{rate:.1f}%），PM {pm}")
+            lines.append(f"- {version_group}：{owned} | {total}（{rate:.1f}%），PM {pm}")
 
         lines.append("")
-        lines.append("最接近下一档（Top 10）")
+        lines.append("最接近下一档（前 10）")
         for idx, item in enumerate(next_up[:10], start=1):
-            lines.append(
-                f"No.{idx} {item['song_name']} [{item['difficulty']}] 距 {item['next_grade']} 还差 {item['gap']}"
-            )
+            lines.append(f"第 {idx} 名：{item['song_name']} [{item['difficulty']}] 距 {item['next_grade']} 还差 {item['gap']}")
         if not next_up:
             lines.append("- 所有已录入谱面都已 PM。")
 
+        mai_top = sorted(score_rows, key=lambda row: (row.mai_value, row.best_score), reverse=True)[:5]
         lines.append("")
-        lines.append("Top 10 PTT")
+        lines.append("mai 前 5")
+        for idx, row in enumerate(mai_top, start=1):
+            lines.append(f"第 {idx} 名：{row.song_name} [{row.difficulty}] {row.mai_value}")
+
+        chu_top = sorted(score_rows, key=lambda row: (row.chu_value, row.best_score), reverse=True)[:5]
+        lines.append("")
+        lines.append("chu 前 5")
+        for idx, row in enumerate(chu_top, start=1):
+            lines.append(f"第 {idx} 名：{row.song_name} [{row.difficulty}] {row.chu_value:.3f}")
+
+        small_p_top = sorted(score_rows, key=lambda row: (row.small_p, row.best_score), reverse=True)[:5]
+        lines.append("")
+        lines.append("小 p 前 5")
+        for idx, row in enumerate(small_p_top, start=1):
+            lines.append(f"第 {idx} 名：{row.song_name} [{row.difficulty}] {row.small_p:.4f} | {row.small_p_grade}")
+
+        lines.append("")
+        lines.append("PTT 前 10")
         for idx, item in enumerate(top10, start=1):
+            metric_row = score_row_by_chart_id.get(int(item["chart_id"]))
+            status_suffix = f" | {metric_row.score_status}" if metric_row else ""
             lines.append(
-                f"No.{idx} {item['song_name']} [{item['difficulty']}] {item['best_score']}  PTT {item['ptt']:.3f}"
+                f"第 {idx} 名：{item['song_name']} [{item['difficulty']}] {item['best_score']}  PTT {item['ptt']:.3f}{status_suffix}"
             )
 
         lines.append("")
-        lines.append("Top 30 PTT")
+        lines.append("PTT 前 30")
         for idx, item in enumerate(top30, start=1):
+            metric_row = score_row_by_chart_id.get(int(item["chart_id"]))
+            status_suffix = f" | {metric_row.score_status}" if metric_row else ""
             lines.append(
-                f"No.{idx} {item['song_name']} [{item['difficulty']}] {item['best_score']}  PTT {item['ptt']:.3f}"
+                f"第 {idx} 名：{item['song_name']} [{item['difficulty']}] {item['best_score']}  PTT {item['ptt']:.3f}{status_suffix}"
             )
 
         return "\n".join(lines)
+
+    def _load_all_chart_rows(self) -> list[dict]:
+        rows = self.repo.get_all_chart_rows()
+        source_rows: list[dict] = []
+        for row in rows:
+            source_rows.append(
+                {
+                    "chart_id": int(row["chart_id"]),
+                    "song_name": str(row["song_name"]),
+                    "pack_name": str(row["pack_name"]),
+                    "version_group": str(row["version_group"]),
+                    "version_text": str(row["version_text"]),
+                    "difficulty": str(row["difficulty"]),
+                    "level_text": str(row["level_text"]),
+                    "constant": float(row["constant"]),
+                    "note_count": int(row["note_count"] or 0),
+                    "best_score": 0,
+                    "play_count": 0,
+                }
+            )
+        return source_rows
