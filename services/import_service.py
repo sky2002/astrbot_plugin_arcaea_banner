@@ -60,13 +60,15 @@ class ImportService:
                 not (recognized.song_name_visible or recognized.song_name_guess)
                 or recognized.difficulty not in ALLOWED_DIFFICULTIES
                 or recognized.score <= 0
+                or recognized.note_count <= 0
             ):
-                return None, "识别失败：未能得到有效的曲名/难度/分数。"
+                return None, "识别失败：未能得到有效的曲名/难度/分数/物量。"
 
             resolved = self.chart_matcher.resolve_chart(
                 song_name_visible=recognized.song_name_visible,
                 difficulty=recognized.difficulty,
                 song_name_guess=recognized.song_name_guess,
+                note_count=recognized.note_count,
             )
 
             proposal = ImportProposal(
@@ -77,6 +79,8 @@ class ImportService:
                 match_method=resolved.match_method,
                 matched_name=resolved.matched_name,
                 matched_name_source=resolved.matched_name_source,
+                used_note_count=resolved.used_note_count,
+                matched_note_count=resolved.matched_note_count,
                 force_choose=resolved.chart is None,
             )
             return proposal, None
@@ -91,6 +95,20 @@ class ImportService:
             lines.append(f"{idx}. {cls.format_chart_line(row)}")
         return lines
 
+    @staticmethod
+    def format_match_method(proposal: ImportProposal) -> str:
+        method_labels = {
+            "exact": "精确匹配",
+            "prefix": "前缀匹配",
+            "fuzzy": "模糊匹配",
+            "note_exact": "物量 + 精确匹配",
+            "note_prefix": "物量 + 前缀匹配",
+            "note_fuzzy": "物量 + 模糊匹配",
+            "note_only": "物量匹配",
+            "none": "候选选择",
+        }
+        return method_labels.get(proposal.match_method, proposal.match_method)
+
     def render_current_proposal(self, session: ImportSession) -> str:
         proposal = session.current
         if not proposal:
@@ -104,18 +122,13 @@ class ImportService:
             lines.append(f"识别曲名（推测官方名）：{rec.song_name_guess}")
         lines.append(f"识别难度：{rec.difficulty or '（空）'}")
         lines.append(f"识别分数：{rec.score or 0}")
+        lines.append(f"识别物量：{rec.note_count or 0}")
 
         selected = proposal.selected_chart
-        match_method = proposal.match_method
         if selected and not proposal.force_choose:
-            method_text = {
-                "exact": "精确匹配",
-                "prefix": "前缀匹配",
-                "fuzzy": "模糊匹配",
-                "none": "候选选择",
-            }.get(match_method, match_method)
             lines.append(f"匹配结果：{self.format_chart_line(selected)}")
-            lines.append(f"匹配方式：{method_text}")
+            lines.append(f"匹配方式：{self.format_match_method(proposal)}")
+
             matched_name = proposal.matched_name or ""
             matched_name_source = proposal.matched_name_source
             if matched_name:
@@ -123,13 +136,23 @@ class ImportService:
                     matched_name_source,
                     matched_name_source,
                 )
-                lines.append(f"匹配依据：{source_text} -> {matched_name}")
+                basis = f"{source_text} -> {matched_name}"
+                if proposal.used_note_count and proposal.matched_note_count > 0:
+                    basis += f" | 物量 {proposal.matched_note_count}"
+                lines.append(f"匹配依据：{basis}")
+            elif proposal.used_note_count and proposal.matched_note_count > 0:
+                lines.append(f"匹配依据：物量 {proposal.matched_note_count}")
+
             lines.append("回复“确认”录入，“候选”查看候选，“跳过”忽略，或发送“完成”结束本次导入。")
             return "\n".join(lines)
 
         if proposal.candidates:
             lines.extend(self.render_candidates(proposal))
-            lines.append("未自动确定谱面。回复候选序号将直接录入，或回复“跳过”“完成”。")
+            if proposal.used_note_count and proposal.matched_note_count > 0:
+                lines.append(f"已使用物量 {proposal.matched_note_count} 参与匹配。")
+                lines.append("物量匹配后仍有多个结果，已返回全部候选。回复候选序号将直接录入，或回复“跳过”“完成”。")
+            else:
+                lines.append("未自动确定谱面。回复候选序号将直接录入，或回复“跳过”“完成”。")
         else:
             lines.append("没有找到可用候选。请回复“跳过”，或重新发送更清晰的单张截图。")
         return "\n".join(lines)

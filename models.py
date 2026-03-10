@@ -13,6 +13,7 @@ class RecognizedResult:
     song_name_guess: str
     difficulty: str
     score: int
+    note_count: int
 
 
 @dataclass(slots=True)
@@ -22,6 +23,8 @@ class ChartResolution:
     match_method: str = "none"
     matched_name: str = ""
     matched_name_source: str = "none"
+    used_note_count: bool = False
+    matched_note_count: int = 0
 
 
 @dataclass(slots=True)
@@ -33,6 +36,8 @@ class ImportProposal:
     match_method: str = "none"
     matched_name: str = ""
     matched_name_source: str = "none"
+    used_note_count: bool = False
+    matched_note_count: int = 0
     force_choose: bool = False
 
 

@@ -57,7 +57,10 @@ class VisionService:
   "song_name_visible": "",
   "song_name_guess": "",
   "difficulty": "",
-  "score": 0
+  "score": 0,
+  "pure_count": 0,
+  "far_count": 0,
+  "lost_count": 0
 }
 
 识别重点：
@@ -71,6 +74,7 @@ class VisionService:
 3. difficulty 只能是 PST / PRS / FTR / ETR / BYD 之一。
 4. score 只能输出纯数字整数，例如 9976543。
 5. 不要输出 pack_name，因为结算图里没有可靠的曲包信息。
+6. pure_count，far_count，lost_count填写你从中下部辨认出的pure，far，lost数量。只能输出纯数字正整数。只输出pure，far，lost右侧的第一个整数。
 """.strip()
 
         llm_resp = await self.context.llm_generate(
@@ -99,9 +103,30 @@ class VisionService:
         except Exception:
             score = 0
 
+        pure_raw = data.get("pure_count", 0)
+        try:
+            pure_count = int(pure_raw)
+        except Exception:
+            pure_count = 0
+
+        far_raw = data.get("far_count", 0)
+        try:
+            far_count = int(far_raw)
+        except Exception:
+            far_count = 0
+
+        lost_raw = data.get("lost_count", 0)
+        try:
+            lost_count = int(lost_raw)
+        except Exception:
+            lost_count = 0
+
+        total_note_count = pure_count + far_count + lost_count    
+
         return RecognizedResult(
             song_name_visible=song_name_visible,
             song_name_guess=song_name_guess,
             difficulty=difficulty,
             score=score,
+            note_count=total_note_count,
         )

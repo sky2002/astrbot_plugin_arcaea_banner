@@ -12,14 +12,42 @@ class ChartMatcher:
     def __init__(self, repo: ArcaeaRepository):
         self.repo = repo
 
-    def find_chart_by_alias(self, song_name: str, difficulty: str, pack_name: str = "") -> sqlite3.Row | None:
+    @staticmethod
+    def _filter_rows_by_note_count(rows: list[sqlite3.Row], note_count: int = 0) -> list[sqlite3.Row]:
+        if note_count <= 0:
+            return list(rows)
+        return [row for row in rows if int(row["note_count"] or 0) == note_count]
+
+    @staticmethod
+    def _filter_alias_rows_by_chart_ids(alias_rows: list[sqlite3.Row], chart_ids: set[int]) -> list[sqlite3.Row]:
+        return [row for row in alias_rows if int(row["chart_id"]) in chart_ids]
+
+    @staticmethod
+    def _sort_rows(rows: list[sqlite3.Row]) -> list[sqlite3.Row]:
+        return sorted(
+            rows,
+            key=lambda row: (
+                str(row["song_name"]).lower(),
+                str(row["pack_name"]).lower(),
+                str(row["difficulty"]).lower(),
+                int(row["chart_id"]),
+            ),
+        )
+
+    def _find_chart_by_alias_in_rows(
+        self,
+        song_name: str,
+        difficulty: str,
+        alias_rows: list[sqlite3.Row],
+        pack_name: str = "",
+    ) -> sqlite3.Row | None:
         difficulty = (difficulty or "").strip().upper()
         target = normalize_title(song_name)
 
         if not target or difficulty not in ALLOWED_DIFFICULTIES:
             return None
 
-        rows = self.repo.find_alias_rows_by_norm(difficulty=difficulty, alias_norm=target)
+        rows = [row for row in alias_rows if normalize_title(str(row["matched_alias_name"] or "")) == target]
         if len(rows) == 1:
             return rows[0]
 
@@ -30,8 +58,40 @@ class ChartMatcher:
                 return filtered[0]
         return None
 
-    def find_chart(self, song_name: str, difficulty: str, pack_name: str = "") -> sqlite3.Row | None:
-        chart = self.find_chart_by_alias(song_name, difficulty, pack_name)
+    def find_chart_by_alias(
+        self,
+        song_name: str,
+        difficulty: str,
+        pack_name: str = "",
+        note_count: int = 0,
+    ) -> sqlite3.Row | None:
+        difficulty = (difficulty or "").strip().upper()
+        target = normalize_title(song_name)
+
+        if not target or difficulty not in ALLOWED_DIFFICULTIES:
+            return None
+
+        rows = self.repo.find_alias_rows_by_norm(difficulty=difficulty, alias_norm=target)
+        rows = self._filter_rows_by_note_count(rows, note_count)
+        if len(rows) == 1:
+            return rows[0]
+
+        if len(rows) > 1 and pack_name:
+            pack_target = normalize_title(pack_name)
+            filtered = [row for row in rows if normalize_title(row["pack_name"]) == pack_target]
+            if len(filtered) == 1:
+                return filtered[0]
+        return None
+
+    def _find_chart_in_rows(
+        self,
+        song_name: str,
+        difficulty: str,
+        base_rows: list[sqlite3.Row],
+        alias_rows: list[sqlite3.Row],
+        pack_name: str = "",
+    ) -> sqlite3.Row | None:
+        chart = self._find_chart_by_alias_in_rows(song_name, difficulty, alias_rows, pack_name)
         if chart:
             return chart
 
@@ -43,20 +103,19 @@ class ChartMatcher:
             return None
 
         if pack_name:
-            rows = self.repo.find_exact_charts(song_name=song_name, difficulty=difficulty, pack_name=pack_name)
+            rows = [row for row in base_rows if row["song_name"] == song_name and row["pack_name"] == pack_name]
             if len(rows) == 1:
                 return rows[0]
 
-        rows = self.repo.find_exact_charts(song_name=song_name, difficulty=difficulty)
+        rows = [row for row in base_rows if row["song_name"] == song_name]
         if len(rows) == 1:
             return rows[0]
         if len(rows) > 1:
             return None
 
-        candidates = self.repo.get_charts_by_difficulty(difficulty)
         target = compact(song_name)
 
-        exact_compact = [row for row in candidates if compact(row["song_name"]) == target]
+        exact_compact = [row for row in base_rows if compact(row["song_name"]) == target]
         if len(exact_compact) == 1:
             return exact_compact[0]
         if len(exact_compact) > 1:
@@ -67,7 +126,7 @@ class ChartMatcher:
                     return filtered[0]
             return None
 
-        prefix_matches = [row for row in candidates if is_reasonable_prefix_match(song_name, row["song_name"])]
+        prefix_matches = [row for row in base_rows if is_reasonable_prefix_match(song_name, row["song_name"])]
         if len(prefix_matches) == 1:
             return prefix_matches[0]
         if len(prefix_matches) > 1 and pack_name:
@@ -77,26 +136,49 @@ class ChartMatcher:
                 return filtered[0]
 
         scored: list[tuple[float, sqlite3.Row]] = []
-        for row in candidates:
+        for row in base_rows:
             score = name_match_score(song_name, row["song_name"])
             scored.append((score, row))
         scored.sort(key=lambda item: item[0], reverse=True)
         if scored and scored[0][0] >= 0.93:
             top = scored[0][1]
-            same_name_rows = self.repo.find_exact_charts(song_name=top["song_name"], difficulty=difficulty)
+            same_name_rows = [row for row in base_rows if row["song_name"] == top["song_name"]]
             if len(same_name_rows) == 1:
                 return top
 
         return None
 
-    def find_chart_candidates(self, song_name: str, difficulty: str, limit: int = 5) -> list[sqlite3.Row]:
+    def find_chart(
+        self,
+        song_name: str,
+        difficulty: str,
+        pack_name: str = "",
+        note_count: int = 0,
+    ) -> sqlite3.Row | None:
+        difficulty = (difficulty or "").strip().upper()
+        if difficulty not in ALLOWED_DIFFICULTIES:
+            return None
+
+        base_rows = self._filter_rows_by_note_count(self.repo.get_charts_by_difficulty(difficulty), note_count)
+        chart_ids = {int(row["chart_id"]) for row in base_rows}
+        alias_rows = self._filter_alias_rows_by_chart_ids(self.repo.get_alias_rows_by_difficulty(difficulty), chart_ids)
+        return self._find_chart_in_rows(song_name, difficulty, base_rows, alias_rows, pack_name)
+
+    def _find_chart_candidates_in_rows(
+        self,
+        song_name: str,
+        difficulty: str,
+        base_rows: list[sqlite3.Row],
+        alias_rows: list[sqlite3.Row],
+        limit: int | None = 5,
+    ) -> list[sqlite3.Row]:
         difficulty = (difficulty or "").strip().upper()
         target = normalize_title(song_name)
-        if not target or difficulty not in ALLOWED_DIFFICULTIES:
+        if difficulty not in ALLOWED_DIFFICULTIES:
             return []
-
-        base_rows = self.repo.get_charts_by_difficulty(difficulty)
-        alias_rows = self.repo.get_alias_rows_by_difficulty(difficulty)
+        if not target:
+            ranked_rows = self._sort_rows(base_rows)
+            return ranked_rows if limit is None else ranked_rows[:limit]
 
         scored: dict[int, tuple[float, sqlite3.Row]] = {}
         for row in base_rows:
@@ -114,25 +196,43 @@ class ChartMatcher:
                 scored[chart_id] = (alias_score, row)
 
         ranked = sorted(scored.values(), key=lambda item: item[0], reverse=True)
-        return [row for _score, row in ranked[:limit]]
+        rows = [row for _score, row in ranked]
+        return rows if limit is None else rows[:limit]
 
-    def resolve_chart(self, song_name_visible: str, difficulty: str, song_name_guess: str = "") -> ChartResolution:
-        inputs: list[tuple[str, str]] = []
-        seen_names: set[str] = set()
-        for value, source in ((song_name_visible, "visible"), (song_name_guess, "guess")):
-            value = (value or "").strip()
-            if not value:
-                continue
-            norm = normalize_title(value)
-            if not norm or norm in seen_names:
-                continue
-            seen_names.add(norm)
-            inputs.append((value, source))
+    def find_chart_candidates(
+        self,
+        song_name: str,
+        difficulty: str,
+        limit: int | None = 5,
+        note_count: int = 0,
+    ) -> list[sqlite3.Row]:
+        difficulty = (difficulty or "").strip().upper()
+        if difficulty not in ALLOWED_DIFFICULTIES:
+            return []
 
+        base_rows = self._filter_rows_by_note_count(self.repo.get_charts_by_difficulty(difficulty), note_count)
+        chart_ids = {int(row["chart_id"]) for row in base_rows}
+        alias_rows = self._filter_alias_rows_by_chart_ids(self.repo.get_alias_rows_by_difficulty(difficulty), chart_ids)
+        return self._find_chart_candidates_in_rows(song_name, difficulty, base_rows, alias_rows, limit)
+
+    def _resolve_from_inputs(
+        self,
+        inputs: list[tuple[str, str]],
+        difficulty: str,
+        base_rows: list[sqlite3.Row],
+        alias_rows: list[sqlite3.Row],
+        candidate_limit: int | None,
+    ) -> ChartResolution:
         for name_input, name_source in inputs:
-            chart = self.find_chart(name_input, difficulty)
+            chart = self._find_chart_in_rows(name_input, difficulty, base_rows, alias_rows)
             if chart:
-                candidates = self.find_chart_candidates(name_input, difficulty, limit=5)
+                candidates = self._find_chart_candidates_in_rows(
+                    name_input,
+                    difficulty,
+                    base_rows,
+                    alias_rows,
+                    limit=candidate_limit,
+                )
                 normalized_input = normalize_title(name_input)
                 normalized_chart = normalize_title(chart["song_name"])
                 if normalized_input == normalized_chart:
@@ -153,21 +253,107 @@ class ChartMatcher:
         merged_candidates: list[sqlite3.Row] = []
         seen_chart_ids: set[int] = set()
         for name_input, _name_source in inputs:
-            for row in self.find_chart_candidates(name_input, difficulty, limit=5):
+            rows = self._find_chart_candidates_in_rows(
+                name_input,
+                difficulty,
+                base_rows,
+                alias_rows,
+                limit=candidate_limit,
+            )
+            for row in rows:
                 chart_id = int(row["chart_id"])
                 if chart_id in seen_chart_ids:
                     continue
                 seen_chart_ids.add(chart_id)
                 merged_candidates.append(row)
-                if len(merged_candidates) >= 5:
+                if candidate_limit is not None and len(merged_candidates) >= candidate_limit:
                     break
-            if len(merged_candidates) >= 5:
+            if candidate_limit is not None and len(merged_candidates) >= candidate_limit:
                 break
 
         return ChartResolution(
             chart=None,
             candidates=merged_candidates,
             match_method="none",
-            matched_name=song_name_visible or song_name_guess,
-            matched_name_source="visible" if song_name_visible else ("guess" if song_name_guess else "none"),
+            matched_name=inputs[0][0] if inputs else "",
+            matched_name_source=inputs[0][1] if inputs else "none",
         )
+
+    def resolve_chart(
+        self,
+        song_name_visible: str,
+        difficulty: str,
+        song_name_guess: str = "",
+        note_count: int = 0,
+    ) -> ChartResolution:
+        difficulty = (difficulty or "").strip().upper()
+        inputs: list[tuple[str, str]] = []
+        seen_names: set[str] = set()
+        for value, source in ((song_name_visible, "visible"), (song_name_guess, "guess")):
+            value = (value or "").strip()
+            if not value:
+                continue
+            norm = normalize_title(value)
+            if not norm or norm in seen_names:
+                continue
+            seen_names.add(norm)
+            inputs.append((value, source))
+
+        if difficulty not in ALLOWED_DIFFICULTIES:
+            return ChartResolution(
+                chart=None,
+                candidates=[],
+                match_method="none",
+                matched_name=song_name_visible or song_name_guess,
+                matched_name_source="visible" if song_name_visible else ("guess" if song_name_guess else "none"),
+            )
+
+        base_rows = self.repo.get_charts_by_difficulty(difficulty)
+        alias_rows = self.repo.get_alias_rows_by_difficulty(difficulty)
+
+        title_resolution = self._resolve_from_inputs(inputs, difficulty, base_rows, alias_rows, candidate_limit=5)
+        if title_resolution.chart is not None and title_resolution.match_method in {"exact", "prefix"}:
+            return title_resolution
+
+        if note_count > 0:
+            note_rows = self._filter_rows_by_note_count(base_rows, note_count)
+            if note_rows:
+                note_chart_ids = {int(row["chart_id"]) for row in note_rows}
+                note_alias_rows = self._filter_alias_rows_by_chart_ids(alias_rows, note_chart_ids)
+                note_resolution = self._resolve_from_inputs(
+                    inputs,
+                    difficulty,
+                    note_rows,
+                    note_alias_rows,
+                    candidate_limit=None,
+                )
+                if note_resolution.chart is not None:
+                    note_resolution.used_note_count = True
+                    note_resolution.matched_note_count = note_count
+                    note_resolution.match_method = f"note_{note_resolution.match_method}"
+                    return note_resolution
+
+                if len(note_rows) == 1:
+                    only_row = note_rows[0]
+                    return ChartResolution(
+                        chart=only_row,
+                        candidates=[only_row],
+                        match_method="note_only",
+                        matched_name=inputs[0][0] if inputs else "",
+                        matched_name_source=inputs[0][1] if inputs else "none",
+                        used_note_count=True,
+                        matched_note_count=note_count,
+                    )
+
+                note_candidates = note_resolution.candidates or self._sort_rows(note_rows)
+                return ChartResolution(
+                    chart=None,
+                    candidates=note_candidates,
+                    match_method="none",
+                    matched_name=note_resolution.matched_name,
+                    matched_name_source=note_resolution.matched_name_source,
+                    used_note_count=True,
+                    matched_note_count=note_count,
+                )
+
+        return title_resolution
