@@ -1,3 +1,5 @@
+"""实现 AstrBot 插件入口，并把各项命令路由到对应服务。"""
+
 from __future__ import annotations
 
 import os
@@ -124,7 +126,9 @@ COMMAND_HELP = {
 
 @register("helloworld", "YourName", "Arcaea 成绩导入与总结", "1.8.0")
 class ArcaeaImportPlugin(Star):
+    """AstrBot 插件主类，负责初始化服务、管理会话并响应命令。"""
     def __init__(self, context: Context):
+        """初始化插件依赖、数据库连接和各类会话缓存。"""
         super().__init__(context)
         self.context = context
         self.conn: sqlite3.Connection | None = None
@@ -145,6 +149,7 @@ class ArcaeaImportPlugin(Star):
         self.delete_service: DeleteScoreService | None = None
 
     async def initialize(self):
+        """在插件启动时建立数据库并初始化业务服务。"""
         data_dir = StarTools.get_data_dir()
         self.db_path = os.path.join(data_dir, DB_FILENAME)
 
@@ -169,42 +174,53 @@ class ArcaeaImportPlugin(Star):
         logger.info(f"[arcaea] database ready: {self.db_path}")
 
     async def terminate(self):
+        """在插件卸载时关闭数据库连接。"""
         if self.conn:
             self.conn.close()
             self.conn = None
 
     def _new_import_session(self) -> ImportSession:
+        """创建新的导入会话对象。"""
         return ImportSession()
 
     def _get_import_session(self, event: AstrMessageEvent) -> ImportSession:
+        """按当前事件对应的用户获取导入会话。"""
         user_key = get_user_key(event)
         if user_key not in self.import_sessions:
             self.import_sessions[user_key] = self._new_import_session()
         return self.import_sessions[user_key]
 
     def _clear_import_session(self, event: AstrMessageEvent):
+        """清理当前用户的导入会话。"""
         self.import_sessions.pop(get_user_key(event), None)
 
     def _get_delete_session(self, event: AstrMessageEvent) -> DeleteSession | None:
+        """获取当前用户的删除会话。"""
         return self.delete_sessions.get(get_user_key(event))
 
     def _set_delete_session(self, event: AstrMessageEvent, session: DeleteSession):
+        """保存当前用户的删除会话。"""
         self.delete_sessions[get_user_key(event)] = session
 
     def _clear_delete_session(self, event: AstrMessageEvent):
+        """清理当前用户的删除会话。"""
         self.delete_sessions.pop(get_user_key(event), None)
 
     def _get_title_missing_session(self, event: AstrMessageEvent) -> TitleMissingSession | None:
+        """获取当前用户的称号查询选择会话。"""
         return self.title_missing_sessions.get(get_user_key(event))
 
     def _set_title_missing_session(self, event: AstrMessageEvent, session: TitleMissingSession):
+        """保存当前用户的称号查询选择会话。"""
         self.title_missing_sessions[get_user_key(event)] = session
 
     def _clear_title_missing_session(self, event: AstrMessageEvent):
+        """清理当前用户的称号查询选择会话。"""
         self.title_missing_sessions.pop(get_user_key(event), None)
 
     @staticmethod
     def _extract_command_args(text: str, command_name: str) -> str:
+        """从原始消息文本中提取命令参数部分。"""
         raw = (text or "").strip()
         if not raw:
             return ""
@@ -218,17 +234,21 @@ class ArcaeaImportPlugin(Star):
 
     @staticmethod
     def _is_help_requested(args: str) -> bool:
+        """判断参数是否表示用户在请求帮助信息。"""
         return (args or "").strip().lower() in {"--help", "-h"}
 
     @staticmethod
     def _normalize_command_name(name: str) -> str:
+        """把命令别名归一化为帮助系统使用的名称。"""
         return (name or "").strip().split(maxsplit=1)[0].lstrip("/")
 
     @staticmethod
     def _build_command_usage(command_name: str) -> str:
+        """生成单个命令的用法说明。"""
         return COMMAND_HELP[command_name]["usage"]
 
     def _build_help_text(self, target: str | None = None) -> str:
+        """生成插件总帮助或指定命令的帮助文本。"""
         if target:
             command_name = self._normalize_command_name(target)
             if command_name in COMMAND_HELP:
@@ -246,12 +266,14 @@ class ArcaeaImportPlugin(Star):
         return "\n".join(lines)
 
     def _validate_no_arg_command(self, args: str, command_name: str) -> str | None:
+        """校验无参数命令是否被错误地传入了参数。"""
         if self._is_help_requested(args) or args:
             return self._build_command_usage(command_name)
         return None
 
     @staticmethod
     def _parse_title_missing_args(args: str) -> tuple[str | None, str | None, int | None, str | None]:
+        """解析称号缺失查询命令中的版本与数量参数。"""
         text = (args or "").strip()
         if not text:
             return None, None, None, None
@@ -274,6 +296,7 @@ class ArcaeaImportPlugin(Star):
 
     @staticmethod
     def _title_query_label(mode: str) -> str:
+        """把查询模式转换为用户可读的中文标签。"""
         if mode == "near":
             return "冲牌建议"
         return "未完成曲目清单"
@@ -286,6 +309,7 @@ class ArcaeaImportPlugin(Star):
         version_group: str | None = None,
         limit: int | None = None,
     ) -> str:
+        """根据模式和版本构造称号查询结果文本。"""
         assert self.title_missing_service is not None
         if mode == "near":
             return self.title_missing_service.build_near_text(
@@ -302,6 +326,7 @@ class ArcaeaImportPlugin(Star):
         )
 
     async def _handle_title_query_command(self, event: AstrMessageEvent, command_name: str, mode: str):
+        """统一处理称号缺失和冲牌建议两类查询命令。"""
         assert self.title_missing_service is not None
 
         try:
@@ -345,6 +370,7 @@ class ArcaeaImportPlugin(Star):
 
                     @session_waiter(timeout=DELETE_CONFIRM_TIMEOUT_SECONDS, record_history_chains=False)
                     async def title_query_waiter(controller: SessionController, next_event: AstrMessageEvent):
+                        """等待用户在版本候选列表中选择具体版本。"""
                         current = self._get_title_missing_session(next_event)
                         if current is None:
                             controller.stop()
@@ -464,6 +490,7 @@ class ArcaeaImportPlugin(Star):
 
             @session_waiter(timeout=IMPORT_TIMEOUT_SECONDS, record_history_chains=False)
             async def import_waiter(controller: SessionController, next_event: AstrMessageEvent):
+                """在导入会话中持续接收截图和文本指令。"""
                 session = self._get_import_session(next_event)
                 text = (next_event.message_str or "").strip()
                 images = extract_image_inputs(next_event)
@@ -705,6 +732,7 @@ class ArcaeaImportPlugin(Star):
 
             @session_waiter(timeout=DELETE_CONFIRM_TIMEOUT_SECONDS, record_history_chains=False)
             async def delete_waiter(controller: SessionController, next_event: AstrMessageEvent):
+                """等待用户确认或取消删除当前成绩。"""
                 session = self._get_delete_session(next_event)
                 if session is None:
                     controller.stop()

@@ -1,9 +1,12 @@
+"""提供 Arcaea 及跨游戏分数表相关的基础换算公式。"""
+
 from __future__ import annotations
 
 from .helpers import clamp
 
 
 def calc_arc_ptt(constant: float, score: int) -> float:
+    """根据定数和原始分计算 Arcaea PTT。"""
     if not score:
         return 0.0
     return max(
@@ -19,6 +22,7 @@ def calc_arc_ptt(constant: float, score: int) -> float:
 
 
 def calc_get_value(constant: float, score: int, p_plus: int, note_count: int) -> float:
+    """根据原始分和物量计算跨游戏分数表的 GET 值。"""
     if score <= 0 or note_count <= 0:
         return 0.0
     return float(constant) * (
@@ -28,6 +32,7 @@ def calc_get_value(constant: float, score: int, p_plus: int, note_count: int) ->
 
 
 def calc_max_value(constant: float) -> float:
+    """根据定数计算单谱面的 MAX 值。"""
     return float(constant) * (
         clamp(1.0 - 0.9, 0.0, 0.095)
         + 28.5 * clamp(1.0 - 0.99, 0.0, 0.01)
@@ -35,6 +40,7 @@ def calc_max_value(constant: float) -> float:
 
 
 def calc_arc_contribution(arc_rank: int, arc_ptt: float) -> float:
+    """根据 Arc 排名计算该谱面对总表的贡献值。"""
     if arc_rank <= 10:
         return arc_ptt / 20
     if arc_rank <= 30:
@@ -43,6 +49,7 @@ def calc_arc_contribution(arc_rank: int, arc_ptt: float) -> float:
 
 
 def score_grade(score: int) -> str:
+    """把原始分映射为成绩评级文本。"""
     if score >= 10_000_000:
         return "PM"
     if score >= 9_900_000:
@@ -55,6 +62,7 @@ def score_grade(score: int) -> str:
 
 
 def next_grade_gap(score: int) -> tuple[str | None, int]:
+    """计算距离下一个成绩评级还差多少分。"""
     milestones = [
         ("AA", 9_500_000),
         ("EX", 9_800_000),

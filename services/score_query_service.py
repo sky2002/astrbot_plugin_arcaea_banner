@@ -1,3 +1,5 @@
+"""处理单曲成绩查询和展示文案。"""
+
 from __future__ import annotations
 
 from ..constants import ALLOWED_DIFFICULTIES
@@ -23,12 +25,15 @@ MATCH_METHOD_LABELS = {
 
 
 class ScoreQueryService:
+    """处理单曲成绩查询及其文本展示。"""
     def __init__(self, repo: ArcaeaRepository, chart_matcher: ChartMatcher):
+        """初始化单曲查询所需的依赖。"""
         self.repo = repo
         self.chart_matcher = chart_matcher
         self.score_sheet_service = ScoreSheetService()
 
     def build_usage_text(self, detail: str | None = None) -> str:
+        """生成单曲查询命令的用法说明。"""
         lines = [
             "用法：/score <chart_id>",
             "或：/score <难度> <曲名>",
@@ -40,6 +45,7 @@ class ScoreQueryService:
         return "\n".join(lines)
 
     def build_score_text(self, user_key: str, args: str) -> str:
+        """根据用户输入构造单曲成绩查询结果。"""
         query = (args or "").strip()
         if not query:
             return self.build_usage_text()
@@ -72,12 +78,14 @@ class ScoreQueryService:
         return f"没有找到谱面：{song_name} [{difficulty}]"
 
     def _build_by_chart_id(self, user_key: str, chart_id: int) -> str:
+        """按 chart_id 构造单曲查询结果。"""
         chart = self.repo.get_chart_by_id(chart_id)
         if chart is None:
             return f"没有找到 chart_id 为 {chart_id} 的谱面。"
         return self._build_chart_text(user_key=user_key, chart=chart)
 
     def _build_chart_text(self, user_key: str, chart, query_name: str = "", match_method: str = "") -> str:
+        """把单张谱面和用户成绩格式化为展示文本。"""
         chart_id = int(chart["chart_id"])
         user_row = self.repo.get_user_chart_best_row(user_key, chart_id)
 
@@ -147,6 +155,7 @@ class ScoreQueryService:
         return "\n".join(lines)
 
     def _build_candidate_text(self, song_name: str, difficulty: str, candidates: list) -> str:
+        """生成模糊匹配候选列表文本。"""
         lines = [f"模糊匹配结果：{song_name} [{difficulty}]", "", "可以尝试使用 /score <chart_id>："]
         for idx, row in enumerate(candidates, start=1):
             lines.append(
@@ -156,6 +165,7 @@ class ScoreQueryService:
 
     @staticmethod
     def _format_full_score_gap(label: str, current: int, target: int, gap: int) -> str:
+        """格式化 Spirit 或 Tribute 所需的 101 分差距。"""
         tier_label = TIER_LABELS[label]
         if gap <= 0:
             return f"- {tier_label}：已达成（101 万满分={current}）"
@@ -163,6 +173,7 @@ class ScoreQueryService:
 
     @staticmethod
     def _format_score_gap(label: str, current: int, target: int, gap: int) -> str:
+        """格式化 Legend 所需的原始分差距。"""
         tier_label = TIER_LABELS[label]
         if gap <= 0:
             return f"- {tier_label}：已达成（原始分={current}）"

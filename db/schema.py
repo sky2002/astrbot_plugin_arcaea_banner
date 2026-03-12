@@ -1,19 +1,24 @@
+"""负责初始化和升级插件使用的 SQLite 表结构。"""
+
 from __future__ import annotations
 
 import sqlite3
 
 
 def _table_columns(conn: sqlite3.Connection, table_name: str) -> set[str]:
+    """读取指定数据表当前已有的字段集合。"""
     rows = conn.execute(f"PRAGMA table_info({table_name})").fetchall()
     return {str(row[1]) for row in rows}
 
 
 def _ensure_column(conn: sqlite3.Connection, table_name: str, column_name: str, ddl: str):
+    """在字段缺失时为现有数据表补充列定义。"""
     if column_name not in _table_columns(conn, table_name):
         conn.execute(f"ALTER TABLE {table_name} ADD COLUMN {column_name} {ddl}")
 
 
 def ensure_schema(conn: sqlite3.Connection):
+    """初始化插件所需的数据表，并补齐兼容旧版本的字段。"""
     conn.executescript(
         """
         CREATE TABLE IF NOT EXISTS users (

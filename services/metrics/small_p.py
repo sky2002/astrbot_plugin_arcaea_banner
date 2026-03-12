@@ -1,7 +1,10 @@
+"""提供小 p 值及其评级的计算逻辑。"""
+
 from __future__ import annotations
 
 
 def calc_small_p(note_count: int, p_plus: int) -> float:
+    """根据物量和 p+ 计算小 p 值。"""
     if note_count <= 0:
         return 0.0
     ratio = p_plus / note_count
@@ -13,6 +16,7 @@ def calc_small_p(note_count: int, p_plus: int) -> float:
 
 
 def calc_small_p_grade(small_p: float) -> str:
+    """把小 p 值转换为等级文本。"""
     if small_p < 0.8:
         if small_p < 0.6:
             return "D" if small_p < 0.5 else "C"

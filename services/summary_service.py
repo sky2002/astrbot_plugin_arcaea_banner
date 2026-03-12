@@ -1,3 +1,5 @@
+"""生成用户总体成绩摘要文本。"""
+
 from __future__ import annotations
 
 from ..constants import ALLOWED_DIFFICULTIES
@@ -7,11 +9,14 @@ from ..services.metrics.arc import calc_arc_ptt, next_grade_gap, score_grade
 
 
 class SummaryService:
+    """生成用户整体导入情况和跨游戏摘要。"""
     def __init__(self, repo: ArcaeaRepository):
+        """初始化摘要服务依赖。"""
         self.repo = repo
         self.cross_game_summary = CrossGameSummaryService()
 
     def build_summary_text(self, user_key: str) -> str:
+        """构造用户的总体成绩摘要文本。"""
         rows = self.repo.get_user_chart_rows(user_key)
         if not rows:
             return "你还没有任何成绩记录。\n先发送 /import，然后发一张 Arcaea 结算截图。"
@@ -186,6 +191,7 @@ class SummaryService:
         return "\n".join(lines)
 
     def _load_all_chart_rows(self) -> list[dict]:
+        """加载全曲库数据供整体统计使用。"""
         rows = self.repo.get_all_chart_rows()
         source_rows: list[dict] = []
         for row in rows:

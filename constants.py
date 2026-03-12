@@ -1,3 +1,5 @@
+"""集中定义插件运行时使用的常量和命令关键词。"""
+
 from __future__ import annotations
 
 DB_FILENAME = "test.db"

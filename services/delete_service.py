@@ -1,3 +1,5 @@
+"""处理成绩删除流程和确认文案。"""
+
 from __future__ import annotations
 
 from ..constants import ALLOWED_DIFFICULTIES
@@ -7,11 +9,14 @@ from .chart_matcher import ChartMatcher
 
 
 class DeleteScoreService:
+    """处理成绩删除的查询、确认和输出文案。"""
     def __init__(self, repo: ArcaeaRepository, chart_matcher: ChartMatcher):
+        """初始化删除服务依赖。"""
         self.repo = repo
         self.chart_matcher = chart_matcher
 
     def build_usage_text(self, detail: str | None = None) -> str:
+        """生成删除命令的用法说明。"""
         lines = [
             "用法：/delete_score <难度> <曲名>",
             "例如：/delete_score BYD Testify",
@@ -22,6 +27,7 @@ class DeleteScoreService:
         return "\n".join(lines)
 
     def prepare_delete_by_chart_id(self, user_key: str, chart_id: int) -> tuple[DeleteSession | None, str]:
+        """按 chart_id 准备删除确认信息。"""
         chart = self.repo.get_chart_by_id(chart_id)
         if not chart:
             return None, f"未找到 chart_id={chart_id} 对应的谱面。"
@@ -34,6 +40,7 @@ class DeleteScoreService:
         return DeleteSession(confirm=confirm), self._format_confirm_text(confirm)
 
     def prepare_delete_by_name(self, user_key: str, difficulty: str, song_name: str) -> tuple[DeleteSession | None, str]:
+        """按难度和曲名准备删除流程。"""
         difficulty = (difficulty or "").strip().upper()
         if difficulty not in ALLOWED_DIFFICULTIES:
             allowed = " | ".join(sorted(ALLOWED_DIFFICULTIES))
@@ -69,6 +76,7 @@ class DeleteScoreService:
         return None, "\n".join(lines)
 
     def choose_candidate(self, session: DeleteSession, index: int) -> tuple[DeleteConfirmSession | None, str]:
+        """在多候选删除场景下确认用户选择的谱面。"""
         candidates = session.candidates
         if not (1 <= index <= len(candidates)):
             return None, f"候选序号无效，请输入 1 到 {len(candidates)} 之间的数字。"
@@ -79,9 +87,11 @@ class DeleteScoreService:
         return confirm, self._format_confirm_text(confirm)
 
     def delete_confirmed(self, user_key: str, chart_id: int) -> str:
+        """执行已经确认的删除操作。"""
         return self.delete_by_chart_id(user_key, chart_id)
 
     def delete_by_chart_id(self, user_key: str, chart_id: int) -> str:
+        """直接按 chart_id 删除成绩。"""
         chart = self.repo.get_chart_by_id(chart_id)
         if not chart:
             return f"未找到 chart_id={chart_id} 对应的谱面。"
@@ -94,6 +104,7 @@ class DeleteScoreService:
         return self._format_deleted_text(chart, user_row, result)
 
     def delete_by_name(self, user_key: str, difficulty: str, song_name: str) -> str:
+        """按曲名流程删除成绩，并在需要时返回候选。"""
         session, text = self.prepare_delete_by_name(user_key, difficulty, song_name)
         if session is None:
             return text
@@ -102,6 +113,7 @@ class DeleteScoreService:
         return self.delete_confirmed(user_key, session.confirm.chart_id)
 
     def _collect_owned_candidates(self, user_key: str, rows) -> list[DeleteConfirmSession]:
+        """从候选谱面中过滤出用户实际有成绩的项。"""
         candidates: list[DeleteConfirmSession] = []
         seen_chart_ids: set[int] = set()
         for row in rows:
@@ -117,6 +129,7 @@ class DeleteScoreService:
 
     @staticmethod
     def _build_confirm_session(user_row) -> DeleteConfirmSession:
+        """把数据库行转换为删除确认会话对象。"""
         return DeleteConfirmSession(
             chart_id=int(user_row["chart_id"]),
             song_name=str(user_row["song_name"]),
@@ -133,6 +146,7 @@ class DeleteScoreService:
         difficulty: str,
         candidates: list[DeleteConfirmSession],
     ) -> str:
+        """生成删除候选列表文本。"""
         lines = [f"匹配到多个已录入候选，请回复序号选择要删除的谱面：", f"目标：{song_name} [{difficulty}]", ""]
         for idx, item in enumerate(candidates, start=1):
             lines.append(
@@ -144,6 +158,7 @@ class DeleteScoreService:
         return "\n".join(lines)
 
     def _format_confirm_text(self, session: DeleteConfirmSession) -> str:
+        """生成删除前的确认提示文本。"""
         return (
             "即将删除以下谱面的成绩记录，请二次确认：\n"
             f"- 谱面：{session.song_name} [{session.difficulty}]\n"
@@ -154,6 +169,7 @@ class DeleteScoreService:
         )
 
     def _format_deleted_text(self, chart, user_row, result: dict) -> str:
+        """生成删除完成后的结果文本。"""
         return (
             "已删除该谱面的成绩记录。\n"
             f"- 谱面：{chart['song_name']} [{chart['difficulty']}]\n"

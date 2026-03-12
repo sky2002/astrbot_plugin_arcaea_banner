@@ -1,3 +1,5 @@
+"""封装视觉模型选择和截图识别流程。"""
+
 from __future__ import annotations
 
 from astrbot.api import logger
@@ -11,11 +13,14 @@ from ..utils.textnorm import extract_json
 
 
 class VisionService:
+    """负责挑选可用视觉模型并解析截图识别结果。"""
     def __init__(self, context: Context, preferred_provider_id: str = VISION_PROVIDER_ID):
+        """初始化视觉识别服务配置。"""
         self.context = context
         self.preferred_provider_id = preferred_provider_id
 
     async def pick_provider_id(self, event: AstrMessageEvent) -> str | None:
+        """按优先级挑选当前会话可用的视觉模型提供者。"""
         if self.preferred_provider_id and self.preferred_provider_id.strip():
             pid = self.preferred_provider_id.strip()
             prov = self.context.get_provider_by_id(provider_id=pid)
@@ -45,6 +50,7 @@ class VisionService:
         return None
 
     async def recognize_single_result(self, event: AstrMessageEvent, image_input: str) -> RecognizedResult:
+        """调用视觉模型识别单张结算图并解析结构化结果。"""
         provider_id = await self.pick_provider_id(event)
         if not provider_id:
             raise RuntimeError("没有可用 provider。请检查当前启用的配置文件里是否真的加载了模型。")

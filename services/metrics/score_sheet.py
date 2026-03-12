@@ -1,3 +1,5 @@
+"""把原始成绩行转换为跨游戏分数表行和汇总结果。"""
+
 from __future__ import annotations
 
 from ...models import ScoreSheetAggregate, ScoreSheetRow
@@ -12,7 +14,9 @@ from .small_p import calc_small_p, calc_small_p_grade
 
 
 class ScoreSheetService:
+    """负责生成跨游戏分数表的单谱面行和汇总统计。"""
     def build_rows(self, source_rows: list[dict]) -> list[ScoreSheetRow]:
+        """把原始成绩记录转换为带换算结果的分数表行。"""
         rows: list[ScoreSheetRow] = []
         ordered_source_rows = sorted(source_rows, key=lambda row: int(row.get("chart_id", 0)))
 
@@ -75,6 +79,7 @@ class ScoreSheetService:
         return rows
 
     def calc_total_max_value(self, source_rows: list[dict]) -> float:
+        """计算给定谱面集合的 MAX 总值。"""
         return sum(calc_max_value(float(row["constant"])) for row in source_rows)
 
     def build_aggregate(
@@ -82,6 +87,7 @@ class ScoreSheetService:
         rows: list[ScoreSheetRow],
         total_max_override: float | None = None,
     ) -> ScoreSheetAggregate:
+        """根据分数表行生成整体统计结果。"""
         arc_raw_sum = sum(row.arc_contribution for row in rows)
         total_get = sum(row.get_value for row in rows)
         total_max = total_max_override if total_max_override is not None else sum(row.max_value for row in rows)
@@ -109,6 +115,7 @@ class ScoreSheetService:
         )
 
     def _apply_ranks_and_contributions(self, rows: list[ScoreSheetRow]):
+        """为分数表行补充各游戏排名和贡献值。"""
         if not rows:
             return
 

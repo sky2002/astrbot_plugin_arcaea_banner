@@ -1,7 +1,10 @@
+"""提供 Paradigm: Reboot 指标的换算公式。"""
+
 from __future__ import annotations
 
 
 def calc_para_value(constant: float, score_101: int) -> float:
+    """根据定数和 101 分计算 Paradigm 数值。"""
     if score_101 > 1_009_000:
         return float(constant) * 10 + 7 + 3 * ((score_101 - 1_009_000) / 1000) ** 1.35
     if score_101 > 1_000_000:
@@ -11,6 +14,7 @@ def calc_para_value(constant: float, score_101: int) -> float:
 
 
 def calc_para_contribution(para_rank: int, para_value: float) -> float:
+    """根据 para 排名计算贡献值。"""
     if para_value < 0:
         return 0.0
     if para_rank <= 50:

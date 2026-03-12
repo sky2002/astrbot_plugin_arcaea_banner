@@ -1,7 +1,10 @@
+"""提供 Rotaeno 指标的换算公式。"""
+
 from __future__ import annotations
 
 
 def calc_rot_value(constant: float, score_101: int) -> float:
+    """根据定数和 101 分计算 Rotaeno 数值。"""
     bonus_a = min(
         3.4,
         max(
@@ -21,6 +24,7 @@ def calc_rot_value(constant: float, score_101: int) -> float:
 
 
 def calc_rot_contribution(rot_rank: int, rot_value: float) -> float:
+    """根据 rot 排名计算贡献值。"""
     if rot_value < 0:
         return 0.0
     if rot_rank <= 10:

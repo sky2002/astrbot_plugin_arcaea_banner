@@ -1,3 +1,5 @@
+"""根据曲名、别名和物量信息匹配谱面。"""
+
 from __future__ import annotations
 
 import sqlite3
@@ -9,21 +11,26 @@ from ..utils.textnorm import compact, is_reasonable_prefix_match, name_match_sco
 
 
 class ChartMatcher:
+    """封装曲名、别名和物量驱动的谱面匹配逻辑。"""
     def __init__(self, repo: ArcaeaRepository):
+        """初始化谱面匹配器并绑定数据仓储。"""
         self.repo = repo
 
     @staticmethod
     def _filter_rows_by_note_count(rows: list[sqlite3.Row], note_count: int = 0) -> list[sqlite3.Row]:
+        """按物量过滤候选谱面列表。"""
         if note_count <= 0:
             return list(rows)
         return [row for row in rows if int(row["note_count"] or 0) == note_count]
 
     @staticmethod
     def _filter_alias_rows_by_chart_ids(alias_rows: list[sqlite3.Row], chart_ids: set[int]) -> list[sqlite3.Row]:
+        """把别名候选限制在指定谱面集合内。"""
         return [row for row in alias_rows if int(row["chart_id"]) in chart_ids]
 
     @staticmethod
     def _sort_rows(rows: list[sqlite3.Row]) -> list[sqlite3.Row]:
+        """按稳定顺序整理候选谱面列表。"""
         return sorted(
             rows,
             key=lambda row: (
@@ -41,6 +48,7 @@ class ChartMatcher:
         alias_rows: list[sqlite3.Row],
         pack_name: str = "",
     ) -> sqlite3.Row | None:
+        """在候选谱面中通过别名匹配目标曲名。"""
         difficulty = (difficulty or "").strip().upper()
         target = normalize_title(song_name)
 
@@ -65,6 +73,7 @@ class ChartMatcher:
         pack_name: str = "",
         note_count: int = 0,
     ) -> sqlite3.Row | None:
+        """直接通过别名表为曲名和难度查找谱面。"""
         difficulty = (difficulty or "").strip().upper()
         target = normalize_title(song_name)
 
@@ -91,6 +100,7 @@ class ChartMatcher:
         alias_rows: list[sqlite3.Row],
         pack_name: str = "",
     ) -> sqlite3.Row | None:
+        """在候选谱面中执行精确、前缀和模糊匹配。"""
         chart = self._find_chart_by_alias_in_rows(song_name, difficulty, alias_rows, pack_name)
         if chart:
             return chart
@@ -155,6 +165,7 @@ class ChartMatcher:
         pack_name: str = "",
         note_count: int = 0,
     ) -> sqlite3.Row | None:
+        """根据曲名、难度和可选物量查找单个谱面。"""
         difficulty = (difficulty or "").strip().upper()
         if difficulty not in ALLOWED_DIFFICULTIES:
             return None
@@ -172,6 +183,7 @@ class ChartMatcher:
         alias_rows: list[sqlite3.Row],
         limit: int | None = 5,
     ) -> list[sqlite3.Row]:
+        """在候选谱面中找出可展示的模糊匹配候选。"""
         difficulty = (difficulty or "").strip().upper()
         target = normalize_title(song_name)
         if difficulty not in ALLOWED_DIFFICULTIES:
@@ -206,6 +218,7 @@ class ChartMatcher:
         limit: int | None = 5,
         note_count: int = 0,
     ) -> list[sqlite3.Row]:
+        """根据曲名和难度生成候选谱面列表。"""
         difficulty = (difficulty or "").strip().upper()
         if difficulty not in ALLOWED_DIFFICULTIES:
             return []
@@ -223,6 +236,7 @@ class ChartMatcher:
         alias_rows: list[sqlite3.Row],
         candidate_limit: int | None,
     ) -> ChartResolution:
+        """按可见曲名、模型猜测曲名和物量依次尝试解析谱面。"""
         for name_input, name_source in inputs:
             chart = self._find_chart_in_rows(name_input, difficulty, base_rows, alias_rows)
             if chart:
@@ -286,6 +300,7 @@ class ChartMatcher:
         song_name_guess: str = "",
         note_count: int = 0,
     ) -> ChartResolution:
+        """统一返回谱面解析结果、候选和匹配依据。"""
         difficulty = (difficulty or "").strip().upper()
         inputs: list[tuple[str, str]] = []
         seen_names: set[str] = set()

@@ -1,3 +1,5 @@
+"""根据分数表结果统计各版本称号进度。"""
+
 from __future__ import annotations
 
 from ...models import ScoreSheetRow, VersionTitleProgress
@@ -18,7 +20,9 @@ LEGEND_THRESHOLD = 10_000_000
 
 
 class TitleProgressAggregateService:
+    """统计各版本组在不同称号上的完成进度。"""
     def build(self, rows: list[ScoreSheetRow]) -> tuple[list[VersionTitleProgress], VersionTitleProgress]:
+        """汇总全部版本组以及总览进度。"""
         grouped: dict[str, list[ScoreSheetRow]] = {}
         for row in rows:
             grouped.setdefault(str(row.version_group), []).append(row)
@@ -31,6 +35,7 @@ class TitleProgressAggregateService:
         return progress_rows, overall
 
     def _build_single(self, version_group: str, rows: list[ScoreSheetRow]) -> VersionTitleProgress:
+        """为单个版本组计算称号剩余数量。"""
         total = len(rows)
         spirit_remaining = sum(1 for row in rows if row.full_score_101 < SPIRIT_THRESHOLD)
         tribute_remaining = sum(1 for row in rows if row.full_score_101 < TRIBUTE_THRESHOLD)

@@ -1,7 +1,10 @@
+"""提供 Chunithm 对应的换算公式。"""
+
 from __future__ import annotations
 
 
 def calc_chu_value(constant: float, score_101: int) -> float:
+    """根据定数和 101 分计算 Chunithm 值。"""
     inner = min(
         2.0,
         max(
@@ -14,6 +17,7 @@ def calc_chu_value(constant: float, score_101: int) -> float:
 
 
 def calc_chu_contribution(chu_rank: int, chu_value: float) -> float:
+    """根据 Chu 排名计算该谱面的贡献值。"""
     if chu_rank <= 50:
         return chu_value * 1.23 / 50
     return 0.0

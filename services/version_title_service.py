@@ -1,3 +1,5 @@
+"""生成各版本称号进度统计文本。"""
+
 from __future__ import annotations
 
 from ..db.repositories import ArcaeaRepository
@@ -22,12 +24,15 @@ PROGRESS_BAR_WIDTH = 10
 
 
 class VersionTitleService:
+    """生成版本称号进度与总览文本。"""
     def __init__(self, repo: ArcaeaRepository):
+        """初始化版本称号服务依赖。"""
         self.repo = repo
         self.score_sheet_service = ScoreSheetService()
         self.title_progress_service = TitleProgressAggregateService()
 
     def build_all_titles_text(self, user_key: str) -> str:
+        """生成所有称号在各版本组的总览文本。"""
         rows = self._load_all_chart_rows(user_key)
         if not rows:
             return "曲库为空，无法计算版本称号进度。"
@@ -51,15 +56,19 @@ class VersionTitleService:
         return "\n".join(lines)
 
     def build_spirit_text(self, user_key: str) -> str:
+        """生成 Spirit 称号进度文本。"""
         return self._build_single_tier_text(user_key=user_key, tier="spirit")
 
     def build_tribute_text(self, user_key: str) -> str:
+        """生成 Tribute 称号进度文本。"""
         return self._build_single_tier_text(user_key=user_key, tier="tribute")
 
     def build_legend_text(self, user_key: str) -> str:
+        """生成 Legend 称号进度文本。"""
         return self._build_single_tier_text(user_key=user_key, tier="legend")
 
     def _build_single_tier_text(self, user_key: str, tier: str) -> str:
+        """生成单个称号在各版本组的进度文本。"""
         rows = self._load_all_chart_rows(user_key)
         if not rows:
             return "曲库为空，无法计算版本称号进度。"
@@ -85,12 +94,14 @@ class VersionTitleService:
         count_width: int,
         title: str | None = None,
     ) -> list[str]:
+        """格式化总览模式下单个版本组的一行文本。"""
         lines = [title or row.version_group]
         for tier in ("spirit", "tribute", "legend"):
             lines.append(self._format_tier_progress_line(row, tier, count_width))
         return lines
 
     def _format_tier_progress_line(self, row: VersionTitleProgress, tier: str, count_width: int) -> str:
+        """格式化单个称号的进度说明。"""
         label = TIER_LABELS[tier]
         progress_text = self._progress_text(row, tier)
         bar = self._build_progress_bar(self._done_count(row, tier), row.total)
@@ -103,15 +114,18 @@ class VersionTitleService:
         count_width: int,
         overall: bool = False,
     ) -> str:
+        """格式化单称号模式下单个版本组的一行文本。"""
         label = "全曲库" if overall else row.version_group
         progress_text = self._progress_text(row, tier)
         bar = self._build_progress_bar(self._done_count(row, tier), row.total)
         return f"{label}：{progress_text:>{count_width}}  {bar}"
 
     def _progress_text(self, row: VersionTitleProgress, tier: str) -> str:
+        """把完成数和总数转换为统一的进度文本。"""
         return f"{self._done_count(row, tier)} | {row.total}"
 
     def _done_count(self, row: VersionTitleProgress, tier: str) -> int:
+        """计算指定称号在某个版本组中已完成的数量。"""
         if tier == "spirit":
             return row.total - row.spirit_remaining
         if tier == "tribute":
@@ -119,6 +133,7 @@ class VersionTitleService:
         return row.total - row.legend_remaining
 
     def _build_progress_bar(self, done: int, total: int) -> str:
+        """根据完成进度生成文本进度条。"""
         if total <= 0:
             filled = 0
         elif done >= total:
@@ -130,6 +145,7 @@ class VersionTitleService:
         return f"[{'#' * filled}{'.' * (PROGRESS_BAR_WIDTH - filled)}]"
 
     def _load_all_chart_rows(self, user_key: str) -> list[dict]:
+        """加载全曲库及用户成绩数据。"""
         rows = self.repo.get_all_chart_rows_with_user_scores(user_key)
         source_rows: list[dict] = []
         for row in rows:

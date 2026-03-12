@@ -1,3 +1,5 @@
+"""提供消息事件解析辅助函数。"""
+
 from __future__ import annotations
 
 import ast
@@ -9,6 +11,7 @@ import astrbot.api.message_components as Comp
 
 
 def safe_sender_id(event: AstrMessageEvent) -> str:
+    """尽量稳妥地从事件中提取发送者 ID。"""
     try:
         sid = event.get_sender_id()
         if sid:
@@ -32,11 +35,13 @@ def safe_sender_id(event: AstrMessageEvent) -> str:
 
 
 def get_user_key(event: AstrMessageEvent) -> str:
+    """为当前事件生成用于存储的用户键。"""
     sid = safe_sender_id(event) or event.unified_msg_origin or "unknown"
     return str(sid)
 
 
 def get_event_message_key(event: AstrMessageEvent) -> str:
+    """为当前消息生成去重或会话跟踪用的键。"""
     message_obj = getattr(event, "message_obj", None)
     for attr in ("message_id", "msg_id", "id"):
         value = getattr(message_obj, attr, None)
@@ -62,6 +67,7 @@ def get_event_message_key(event: AstrMessageEvent) -> str:
 
 
 def extract_image_inputs(event: AstrMessageEvent) -> list[str]:
+    """从消息事件中提取可用于识别的图片输入。"""
     image_inputs: list[str] = []
     seen: set[str] = set()
     for seg in getattr(event.message_obj, "message", []) or []:

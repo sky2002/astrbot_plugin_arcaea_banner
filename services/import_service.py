@@ -1,3 +1,5 @@
+"""处理截图识别结果导入、候选确认和会话状态推进。"""
+
 from __future__ import annotations
 
 import re
@@ -16,7 +18,9 @@ from ..utils.textnorm import normalize_text_command, normalize_title
 
 
 class ImportService:
+    """处理截图识别导入的匹配、确认和入库流程。"""
     def __init__(self, repo: ArcaeaRepository, vision_service: VisionService, chart_matcher: ChartMatcher):
+        """初始化导入服务依赖和命令关键词集合。"""
         self.repo = repo
         self.vision_service = vision_service
         self.chart_matcher = chart_matcher
@@ -28,6 +32,7 @@ class ImportService:
 
     @staticmethod
     def chart_display_name(chart: sqlite3.Row) -> str:
+        """生成带别名提示的谱面展示名称。"""
         song_name = str(chart["song_name"])
         alias_name = str(chart["matched_alias_name"] or "").strip() if "matched_alias_name" in chart.keys() else ""
         if alias_name and normalize_title(alias_name) != normalize_title(song_name):
@@ -36,6 +41,7 @@ class ImportService:
 
     @classmethod
     def format_chart_line(cls, chart: sqlite3.Row) -> str:
+        """把谱面信息格式化为单行候选文本。"""
         note_suffix = f" | 物量 {int(chart['note_count'])}" if "note_count" in chart.keys() and chart["note_count"] is not None else ""
         return (
             f"{cls.chart_display_name(chart)} [{chart['difficulty']}] | {chart['pack_name']} | "
@@ -44,6 +50,7 @@ class ImportService:
 
     @staticmethod
     def summarize_session(session: ImportSession) -> str:
+        """总结当前导入会话的处理结果。"""
         pending = 1 if session.current else 0
         return (
             f"本次导入结束：已录入 {session.saved} 张，"
@@ -52,6 +59,7 @@ class ImportService:
         )
 
     async def build_import_proposal(self, event: AstrMessageEvent, image_input: str) -> tuple[ImportProposal | None, str | None]:
+        """识别单张截图并生成待确认的导入提案。"""
         try:
             recognized = await self.vision_service.recognize_single_result(event, image_input)
             logger.info(f"[arcaea] recognized = {recognized}")
@@ -90,6 +98,7 @@ class ImportService:
 
     @classmethod
     def render_candidates(cls, proposal: ImportProposal) -> list[str]:
+        """渲染当前导入提案的候选谱面列表。"""
         lines = ["候选谱面："]
         for idx, row in enumerate(proposal.candidates, start=1):
             lines.append(f"{idx}. {cls.format_chart_line(row)}")
@@ -97,6 +106,7 @@ class ImportService:
 
     @staticmethod
     def format_match_method(proposal: ImportProposal) -> str:
+        """把匹配方式编码转换为可读文本。"""
         method_labels = {
             "exact": "精确匹配",
             "prefix": "前缀匹配",
@@ -110,6 +120,7 @@ class ImportService:
         return method_labels.get(proposal.match_method, proposal.match_method)
 
     def render_current_proposal(self, session: ImportSession) -> str:
+        """生成当前待确认导入项的提示文本。"""
         proposal = session.current
         if not proposal:
             return "当前没有待确认项目。请发送一张截图，或发送“完成”结束。"
@@ -158,6 +169,7 @@ class ImportService:
         return "\n".join(lines)
 
     def commit_selected_proposal(self, user_key: str, sender_id: str, session: ImportSession) -> str:
+        """把当前选中的导入提案写入数据库。"""
         proposal = session.current
         if not proposal:
             return "当前没有待确认项目。"
@@ -195,6 +207,7 @@ class ImportService:
         return "\n".join(lines)
 
     async def append_image_to_session(self, event: AstrMessageEvent, session: ImportSession, image_input: str) -> str:
+        """向导入会话追加一张截图并生成反馈。"""
         if session.current:
             return "当前已有待确认项目。请先回复“确认”“候选”或“跳过”，再发送下一张截图。"
 
@@ -214,6 +227,7 @@ class ImportService:
         user_key: str,
         sender_id: str,
     ) -> tuple[str, bool]:
+        """处理导入会话中的文本指令和候选选择。"""
         raw_text = (event.message_str or "").strip()
         cmd = normalize_text_command(raw_text)
 

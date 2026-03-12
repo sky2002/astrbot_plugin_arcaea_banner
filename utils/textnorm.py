@@ -1,3 +1,5 @@
+"""提供文本归一化、JSON 提取和名称匹配辅助函数。"""
+
 from __future__ import annotations
 
 import json
@@ -7,6 +9,7 @@ from difflib import SequenceMatcher
 
 
 def compact(text: str) -> str:
+    """对文本做归一化、去空白和小写处理。"""
     text = unicodedata.normalize("NFKC", str(text or ""))
     text = text.strip().lower()
     text = re.sub(r"\s+", "", text)
@@ -14,10 +17,12 @@ def compact(text: str) -> str:
 
 
 def normalize_text_command(text: str) -> str:
+    """把用户命令文本归一化为便于比较的形式。"""
     return compact(text)
 
 
 def extract_json(text: str) -> dict:
+    """从模型返回文本中提取 JSON 对象。"""
     text = (text or "").strip()
     text = re.sub(r"^```json\s*", "", text, flags=re.I)
     text = re.sub(r"^```\s*", "", text)
@@ -43,6 +48,7 @@ def extract_json(text: str) -> dict:
 
 
 def normalize_title(text: str) -> str:
+    """把曲名归一化为适合匹配的形式。"""
     text = unicodedata.normalize("NFKC", str(text or ""))
     text = text.strip().lower()
     text = re.sub(r"\s+", "", text)
@@ -58,6 +64,7 @@ def normalize_title(text: str) -> str:
 
 
 def common_prefix_len(a: str, b: str) -> int:
+    """计算两个字符串的公共前缀长度。"""
     n = min(len(a), len(b))
     i = 0
     while i < n and a[i] == b[i]:
@@ -66,6 +73,7 @@ def common_prefix_len(a: str, b: str) -> int:
 
 
 def name_match_score(target: str, candidate: str) -> float:
+    """为目标曲名和候选曲名计算相似度分数。"""
     target_c = compact(target)
     cand_c = compact(candidate)
     if not target_c or not cand_c:
@@ -86,6 +94,7 @@ def name_match_score(target: str, candidate: str) -> float:
 
 
 def is_reasonable_prefix_match(target: str, candidate: str) -> bool:
+    """判断候选曲名是否可接受为前缀匹配。"""
     target_c = compact(target)
     cand_c = compact(candidate)
     if not target_c or not cand_c:

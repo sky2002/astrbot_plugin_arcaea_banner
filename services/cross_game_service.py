@@ -1,3 +1,5 @@
+"""生成跨游戏分数表文本报告。"""
+
 from __future__ import annotations
 
 from ..db.repositories import ArcaeaRepository
@@ -6,11 +8,14 @@ from .aggregates.score_summary import CrossGameSummaryService
 
 
 class CrossGameReportService:
+    """生成跨游戏分数表文本报告。"""
     def __init__(self, repo: ArcaeaRepository):
+        """初始化跨游戏报告服务。"""
         self.repo = repo
         self.cross_game_summary = CrossGameSummaryService()
 
     def build_cross_game_text(self, user_key: str) -> str:
+        """为指定用户生成跨游戏分数表结果文本。"""
         source_rows = self._load_user_rows(user_key)
         if not source_rows:
             return "你还没有任何成绩记录。\n先发送 /import，然后发一张 Arcaea 结算截图。"
@@ -91,6 +96,7 @@ class CrossGameReportService:
         rows: list[ScoreSheetRow],
         value_formatter,
     ):
+        """把各游戏 Top 成绩追加到输出文本中。"""
         lines.append("")
         lines.append(title)
         if not rows:
@@ -100,6 +106,7 @@ class CrossGameReportService:
             lines.append(f"第 {idx} 名：{row.song_name} [{row.difficulty}] {row.best_score} | {value_formatter(row)}")
 
     def _load_user_rows(self, user_key: str) -> list[dict]:
+        """加载用户已录入成绩并转换为字典结构。"""
         rows = self.repo.get_user_chart_rows(user_key)
         source_rows: list[dict] = []
         for row in rows:
@@ -121,6 +128,7 @@ class CrossGameReportService:
         return source_rows
 
     def _load_all_chart_rows(self) -> list[dict]:
+        """加载全曲库数据供总上限计算使用。"""
         rows = self.repo.get_all_chart_rows()
         source_rows: list[dict] = []
         for row in rows:

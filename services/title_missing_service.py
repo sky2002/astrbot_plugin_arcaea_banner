@@ -1,3 +1,5 @@
+"""生成称号缺失清单和冲牌建议文本。"""
+
 from __future__ import annotations
 
 from ..db.repositories import ArcaeaRepository
@@ -29,16 +31,20 @@ QUERY_LABELS = {
 
 
 class TitleMissingService:
+    """生成称号缺失清单和冲牌建议文本。"""
     def __init__(self, repo: ArcaeaRepository):
+        """初始化称号缺失服务依赖。"""
         self.repo = repo
         self.score_sheet_service = ScoreSheetService()
         self.aggregate_service = TitleMissingAggregateService()
 
     def parse_version_group(self, version_text: str) -> str | None:
+        """解析用户输入并返回唯一确定的版本组。"""
         resolved, _candidates = self.resolve_version_group(version_text)
         return resolved
 
     def resolve_version_group(self, version_text: str) -> tuple[str | None, list[str]]:
+        """解析版本文本并返回命中的版本或候选列表。"""
         target = compact(version_text)
         if not target:
             return None, []
@@ -68,6 +74,7 @@ class TitleMissingService:
         return None, []
 
     def get_known_versions(self) -> list[str]:
+        """返回当前支持识别的版本组名称。"""
         known_versions = list(VERSION_GROUP_ORDER)
         known_versions.extend(
             sorted(name for name in self.repo.get_chart_counts_by_version().keys() if name not in VERSION_GROUP_ORDER)
@@ -82,6 +89,7 @@ class TitleMissingService:
         limit: int | None = None,
         mode: str = "missing",
     ) -> str:
+        """生成版本输入存在歧义时的候选提示文本。"""
         tier_label = TIER_LABELS[tier]
         query_label = QUERY_LABELS.get(mode, QUERY_LABELS["missing"])
 
@@ -99,6 +107,7 @@ class TitleMissingService:
         return "\n".join(lines)
 
     def build_unknown_version_text(self, version_input: str) -> str:
+        """生成无法识别版本输入时的提示文本。"""
         known_versions = ", ".join(self.get_known_versions())
         return (
             f"\u672a\u8bc6\u522b\u7684\u7248\u672c\u7ec4\uff1a{version_input}\n"
@@ -112,6 +121,7 @@ class TitleMissingService:
         version_group: str | None = None,
         limit: int | None = None,
     ) -> str:
+        """生成指定称号的未完成谱面清单。"""
         rows = self._load_all_chart_rows(user_key)
         if not rows:
             return "\u66f2\u5e93\u4e3a\u7a7a\uff0c\u65e0\u6cd5\u751f\u6210\u672a\u5b8c\u6210\u66f2\u76ee\u6e05\u5355\u3002"
@@ -152,6 +162,7 @@ class TitleMissingService:
         version_group: str | None = None,
         limit: int | None = None,
     ) -> str:
+        """生成指定称号的冲牌建议列表。"""
         rows = self._load_all_chart_rows(user_key)
         if not rows:
             return "\u66f2\u5e93\u4e3a\u7a7a\uff0c\u65e0\u6cd5\u751f\u6210\u51b2\u724c\u5efa\u8bae\u3002"
@@ -219,6 +230,7 @@ class TitleMissingService:
         groups: list,
         limit: int | None,
     ) -> str:
+        """生成单个版本组的缺失谱面展示文本。"""
         if not groups:
             return f"{version_group} \u7684 {tier_label} \u5df2\u5168\u90e8\u5b8c\u6210\u3002"
 
@@ -240,6 +252,7 @@ class TitleMissingService:
         return "\n".join(lines)
 
     def _append_default_preview(self, lines: list[str], groups: list, tier: str):
+        """按默认预览规则向输出中追加缺失谱面。"""
         for group in groups:
             lines.append(f"{group.version_group}\uff1a\u8fd8\u5dee {group.total_missing} \u5f20")
             preview_entries = group.entries[:DEFAULT_PREVIEW_LIMIT]
@@ -253,6 +266,7 @@ class TitleMissingService:
             lines.append("")
 
     def _append_limited_preview(self, lines: list[str], groups: list, tier: str, limit: int, total_missing: int):
+        """按限制数量向输出中追加缺失谱面。"""
         remaining = limit
         shown_total = 0
         for group in groups:
@@ -278,9 +292,11 @@ class TitleMissingService:
             )
 
     def _format_entry(self, idx: int, entry: MissingChartEntry, tier: str) -> str:
+        """格式化缺失清单中的单条谱面文本。"""
         return f"\u7b2c {idx} \u6761\uff1a{self._format_entry_body(entry, tier)}"
 
     def _format_entry_body(self, entry: MissingChartEntry, tier: str) -> str:
+        """格式化缺失清单条目的主体内容。"""
         if tier in {"spirit", "tribute"}:
             return (
                 f"{entry.song_name} [{entry.difficulty}] "
@@ -294,9 +310,11 @@ class TitleMissingService:
         )
 
     def _format_near_entry(self, idx: int, entry: MissingChartEntry, tier: str, show_version_group: bool) -> str:
+        """格式化冲牌建议中的单条谱面文本。"""
         return f"{idx}. {self._format_near_entry_body(entry, tier, show_version_group=show_version_group)}"
 
     def _format_near_entry_body(self, entry: MissingChartEntry, tier: str, show_version_group: bool) -> str:
+        """格式化冲牌建议条目的主体内容。"""
         prefix = f"{entry.version_group} | " if show_version_group else ""
         if tier in {"spirit", "tribute"}:
             return (
@@ -311,6 +329,7 @@ class TitleMissingService:
         )
 
     def _load_all_chart_rows(self, user_key: str) -> list[dict]:
+        """加载包含用户成绩的全谱面数据。"""
         rows = self.repo.get_all_chart_rows_with_user_scores(user_key)
         source_rows: list[dict] = []
         for row in rows:

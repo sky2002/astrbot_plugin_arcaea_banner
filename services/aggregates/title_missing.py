@@ -1,3 +1,5 @@
+"""根据分数表结果计算各称号仍缺少的谱面列表。"""
+
 from __future__ import annotations
 
 from ...models import MissingChartEntry, MissingChartGroup, ScoreSheetRow
@@ -10,12 +12,14 @@ from .title_progress import (
 
 
 class TitleMissingAggregateService:
+    """根据分数表结果聚合称号缺失谱面。"""
     def build(
         self,
         rows: list[ScoreSheetRow],
         tier: str,
         version_filter: str | None = None,
     ) -> list[MissingChartGroup]:
+        """按版本组整理指定称号仍未完成的谱面。"""
         grouped: dict[str, list[MissingChartEntry]] = {}
         normalized_filter = (version_filter or "").strip()
 
@@ -47,6 +51,7 @@ class TitleMissingAggregateService:
         return groups
 
     def _build_entry(self, row: ScoreSheetRow, tier: str) -> MissingChartEntry | None:
+        """把单条分数表记录转换为缺失谱面条目。"""
         if tier == "spirit":
             target_value = SPIRIT_THRESHOLD
             current_value = row.full_score_101
